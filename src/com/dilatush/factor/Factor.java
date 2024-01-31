@@ -67,6 +67,49 @@ public class Factor {
                 // and we're done...
                 System.exit( 0 );
             }
+
+            else {
+                System.out.println( "Generating a test number requires a second argument with the number of bits." );
+                System.exit( 1 );
+            }
         }
+
+        // otherwise we're factoring...
+
+        // read in our number to factor...
+        BigInteger product = null;
+        if( decimalFlag ) {
+            if( _args.length >= 2 )
+                product = new BigInteger( _args[ 1 ] );
+            else {
+                System.out.println( "Missing the second argument: the number to factor, in decimal." );
+                System.exit( 1 );
+            }
+        }
+
+        else {
+            if( _args.length >= 1 ) {
+                Base64.Decoder decoder = Base64.getDecoder();
+                product = new BigInteger( decoder.decode( _args[0] ) );
+            }
+            else {
+                System.out.println( "Missing the argument: the number to factor, in Base64 notation." );
+                System.exit( 1 );
+            }
+        }
+
+        // now we get down to business...
+        InverseMultiply invMult = new InverseMultiply( product );
+        invMult.factor();
     }
 }
+
+/*
+
+419520287946460139
+
+725897149
+
+577933511
+
+ */
