@@ -6,14 +6,32 @@ import java.util.BitSet;
 
 public class InverseMultiply {
 
+    // table providing bit position "guesses" based on subproduct parity (s), target parity (t),
+    // bit position zero (z), and the bit position parity (p)...
+    @SuppressWarnings( "SpellCheckingInspection" )
+    final static int[][] GUESSES = new int[][] {
+            // zspt      a  b...
+            /* 0000 */ { 1, 1 },
+            /* 0001 */ { 1, 0 },
+            /* 0010 */ { 0, 0 },
+            /* 0011 */ { 0, 1 },
+            /* 0100 */ { 1, 0 },
+            /* 0101 */ { 1, 1 },
+            /* 0110 */ { 0, 1 },
+            /* 0111 */ { 0, 0 },
+            /* 1000 */ { 1, 0 },
+            /* 1001 */ { 1, 1 },
+            /* 1010 */ { 0, 1 },
+            /* 1011 */ { 1, 1 }
+    };
 
     final private BitSet target;
     final private int    bits;
     final private int    bitsWithSpares;
     final private int[]  carries;
     final private BitSet product;
-    private BitSet       operandA;
-    private BitSet       operandB;
+    final private BitSet operandA;
+    final private BitSet operandB;
 
 
     public InverseMultiply( final BigInteger _target ) {
@@ -33,6 +51,26 @@ public class InverseMultiply {
 
     public void factor() {
 
+        // make a crude guess at the value of our factors...
+        int bitPos = 0;
+        while( product.length() < target.length() ) {
+
+            int sp = subProduct( bitPos );
+
+            int guessIndex = ((bitPos == 0) ? 1 : 0);
+            guessIndex = (guessIndex << 1) + (sp & 1);
+            guessIndex = (guessIndex << 1) + (bitPos & 1);
+            guessIndex = (guessIndex << 1) + (target.get( bitPos ) ? 1 : 0);
+
+            operandA.set( bitPos, GUESSES[guessIndex][0] == 1 );
+            operandB.set( bitPos, GUESSES[guessIndex][1] == 1 );
+
+            multiply( 0 );  // 21 * 18 very wrong
+
+            bitPos++;
+        }
+
+        product.hashCode();
     }
 
 
@@ -64,9 +102,7 @@ public class InverseMultiply {
 
     static public void main( final String[] _args ) {
         InverseMultiply im = new InverseMultiply( new BigInteger( "3599" ) );
-        im.operandA = BitSet.valueOf( new BigInteger( "61" ).toByteArray() );
-        im.operandB = BitSet.valueOf( new BigInteger( "59" ).toByteArray() );
-        im.multiply( 0 );
+        im.factor();
 
         im.hashCode();
     }
