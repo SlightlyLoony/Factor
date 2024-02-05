@@ -16,8 +16,6 @@ public class FactorBitArray {
     final private long[] bits;  // the array of bits contained in this instance, stored as little-endian and treated as unsigned...
     final private int    size;  // the number of bits in this array...
 
-    private int          ms1;  // bit position of the most significant bit set to a 1...
-
 
     /**
      * Creates a new instance of this class with a bit array set to the bits in the given value interpreted as an unsigned long.
@@ -27,7 +25,6 @@ public class FactorBitArray {
     public FactorBitArray( final long _value ) {
         size = 64 - Long.numberOfLeadingZeros( _value );
         bits = new long[] { _value };
-        ms1 = size - 1;
     }
 
 
@@ -62,12 +59,55 @@ public class FactorBitArray {
             // finally we use these indices to copy one byte from the BigInteger to our new instance...
             bits[ longsInd ] |= (long) (bytes[ bytesInd ] & 0xff) << shiftCnt;
         }
-        ms1 = size - 1;
     }
 
 
+    /**
+     * Returns the current value (0 or 1) of the bit in this set at the given bit position.
+     *
+     * @param _bitPos The position of the bit to return, which must be in the range [0..(size - 1)].
+     * @return The value (0 or 1) of the bit in this set at the given bit position.
+     */
     public int get( final int _bitPos ) {
-        return (int)((bits[ _bitPos >>> 6 ] >>> (_bitPos & 0x3f)) & 1);
+
+        // sanity checks...
+        if( (_bitPos < 0) || (_bitPos >= size) ) throw new IllegalArgumentException( "_bitPos must be non-negative and less than " + size + ", was: " + _bitPos );
+
+        // compute our indices...
+        int longsInd = _bitPos >>> 6;
+        int bitsInd = _bitPos & 0x3f;
+
+        return (longsInd >>> bitsInd) & 1;
+    }
+
+
+    /**
+     * Sets the bit in this set at the given bit position to the given value (0 or 1).  Returns the value (0 or 1) of the bit in this set at the given bit
+     * position before this method was called.
+     *
+     * @param _bitPos The position of the bit to set and return, which must be in the range [0..(size - 1)].
+     * @param _value The value (0 or 1) to assign to the bit in this set at the given bit position.
+     * @return The value (0 or 1) of the bit in this set at the given bit position before this method was called.
+     */
+    public int set( final int _bitPos, final int _value ) {
+
+        // fetch the current value, so we can return it...
+        int retVal = get( _bitPos );
+
+        // sanity checks...
+        if( (_value < 0) || (_value > 1) ) throw new IllegalArgumentException( "_value must be zero or one, was: " + _value );
+
+        // compute our indices...
+        int longsInd = _bitPos >>> 6;
+        int bitsInd = _bitPos & 0x3f;
+
+        // stuff our new value...
+        bits[ longsInd ] =
+                (_value == 0) ?
+                        retVal & ~(1L << _bitPos) :
+                        retVal | (1L << _bitPos);
+
+        return retVal;
     }
 
 
