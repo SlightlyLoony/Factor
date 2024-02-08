@@ -13,18 +13,26 @@ import java.math.BigInteger;
  */
 public class FactorBitArray {
 
+    final public static int MAXSIZE = 10000;
+
     final private long[] bits;  // the array of bits contained in this instance, stored as little-endian and treated as unsigned...
     final private int    size;  // the number of bits in this array...
 
 
     /**
-     * Creates a new instance of this class with a bit array set to the bits in the given value interpreted as an unsigned long.
+     * Creates a new instance of this class with a bit array of the given size with all the bits set to zero.
      *
-     * @param _value The unsigned long value providing the bits for this class.
+     * @param _bits The number of bits for this instance, which must be in the range [1..MAXSIZE].
      */
-    public FactorBitArray( final long _value ) {
-        size = 64 - Long.numberOfLeadingZeros( _value );
-        bits = new long[] { _value };
+    @SuppressWarnings( "unused" )
+    public FactorBitArray( final int _bits ) {
+
+        // sanity checks...
+        if( (_bits < 1) || (_bits > MAXSIZE) ) throw new IllegalArgumentException( "_bits out of range: " + _bits );
+
+        // initialize our instance...
+        size = _bits;
+        bits = new long[ 1 + ((size - 1) >>> 6) ];
     }
 
 
@@ -41,7 +49,7 @@ public class FactorBitArray {
         byte[] bytes = _value.toByteArray();
 
         // we stuff 8 bytes into each long...
-        int longsLen = Math.max( 1, (1 + bytes.length) >>> 3 );
+        int longsLen = Math.max( 1, 1 + ((bytes.length - 1) >>> 3) );
         bits = new long[ longsLen ];
 
         // march through our bytes, copying them to the correct place in our array of longs...
@@ -63,10 +71,27 @@ public class FactorBitArray {
 
 
     /**
-     * Returns the current value (0 or 1) of the bit in this set at the given bit position.
+     * Returns the bit position of the most significant bit set in this bit array, or -1 if all bits are cleared (zeroes).
+     *
+     * @return The bit position of the most significant bit set in this bit array, or -1 if all bits are cleared (zeroes).
+     */
+    public int highestOnePos() {
+
+        // march from most to least significant long, looking for set bits...
+        for( int longsInd = bits.length - 1; longsInd >= 0; longsInd-- ) {
+            int l0 = Long.numberOfLeadingZeros( bits[longsInd] );
+            if( l0 != 0 )
+                return (longsInd << 6) + (63 - l0);
+        }
+        return -1;
+    }
+
+
+    /**
+     * Returns the current value (0 or 1) of the bit in this array at the given bit position.
      *
      * @param _bitPos The position of the bit to return, which must be in the range [0..(size - 1)].
-     * @return The value (0 or 1) of the bit in this set at the given bit position.
+     * @return The value (0 or 1) of the bit in this array at the given bit position.
      */
     public int get( final int _bitPos ) {
 
@@ -77,18 +102,19 @@ public class FactorBitArray {
         int longsInd = _bitPos >>> 6;
         int bitsInd = _bitPos & 0x3f;
 
-        return (longsInd >>> bitsInd) & 1;
+        return (int) ((bits[longsInd] >>> bitsInd) & 1);
     }
 
 
     /**
-     * Sets the bit in this set at the given bit position to the given value (0 or 1).  Returns the value (0 or 1) of the bit in this set at the given bit
+     * Sets the bit in this array at the given bit position to the given value (0 or 1).  Returns the value (0 or 1) of the bit in this array at the given bit
      * position before this method was called.
      *
      * @param _bitPos The position of the bit to set and return, which must be in the range [0..(size - 1)].
-     * @param _value The value (0 or 1) to assign to the bit in this set at the given bit position.
-     * @return The value (0 or 1) of the bit in this set at the given bit position before this method was called.
+     * @param _value The value (0 or 1) to assign to the bit in this array at the given bit position.
+     * @return The value (0 or 1) of the bit in this array at the given bit position before this method was called.
      */
+    @SuppressWarnings("UnusedReturnValue")
     public int set( final int _bitPos, final int _value ) {
 
         // fetch the current value, so we can return it...
@@ -104,19 +130,71 @@ public class FactorBitArray {
         // stuff our new value...
         bits[ longsInd ] =
                 (_value == 0) ?
-                        retVal & ~(1L << _bitPos) :
-                        retVal | (1L << _bitPos);
+                        bits[ longsInd ] & ~(1L << bitsInd) :
+                        bits[ longsInd ] | (1L << bitsInd);
 
         return retVal;
     }
 
 
-    static public void main( final String[] _args) {
+    /**
+     * Clears (sets to zero) all the bits in this set, starting with the bit at the given starting position, through the bit at the given ending position - 1.
+     *
+     * @param _startPos The bit position of the first bit in this array to clear.
+     * @param _endPos The bit position + 1 of the last bit in this array to clear.
+     */
+    public void clear( final int _startPos, final int _endPos ) {
 
-        FactorBitArray fba = new FactorBitArray( new BigInteger( "3599" ) );
-        int sb1 = fba.get( 2 );
-        int sb0 = fba.get( 5 );
+        // sanity checks...
+        if( (_startPos < 0) || (_startPos > size) ) throw new IllegalArgumentException( "_startPos must be non-negative and less than or equal to " + size + ", was: " + _startPos );
+        if( (_endPos < 0) || (_endPos > size) ) throw new IllegalArgumentException( "_endPos must be non-negative and less than or equal to " + size + ", was: " + _endPos );
+        if( _endPos < _startPos ) throw new IllegalArgumentException( "_endPos must >= _startPos" );
 
-        fba.hashCode();
+        // some setup...
+        int  startLongsInd = _startPos >>> 6;
+        long startBitsMask = (1L << (_startPos & 0x3f)) - 1;
+        int  endLongsInd   = (_endPos- 1) >>> 6;
+        long endBitsMask   = -1L << (((_endPos- 1) & 0x3f) + 1);
+
+        // now the actual clearing...
+        for( int longsInd = startLongsInd; longsInd <= endLongsInd; longsInd++ ) {
+
+            if( (longsInd == startLongsInd) && (longsInd == endLongsInd) )
+                bits[longsInd] &= (startBitsMask | endBitsMask);
+            else if( longsInd == startLongsInd )
+                bits[longsInd] &= startBitsMask;  // 0=0;1=1;2=3
+            else if( longsInd == endLongsInd )
+                bits[longsInd] &= endBitsMask;  //0=~1;1=~3;2=~7;63=~
+            else
+                bits[longsInd] = 0;
+        }
+    }
+
+
+    /**
+     * Returns a {@link BigInteger} with the same bit pattern as this instance.
+     *
+     * @return A {@link BigInteger} with the same bit pattern as this instance.
+     */
+    public BigInteger toBigInteger() {
+
+        int hiBit = highestOnePos();
+        byte[] bytes = new byte[2 + (hiBit >>> 3)];
+        for( int i = 0; i < (bytes.length - 1); i++ ) {
+            int longsInd  =  ((bytes.length - 2) - i) >>> 3;
+            int byteShift = (((bytes.length - 2) - i) & 7) << 3;
+
+            bytes[i + 1] |= (0xff & (bits[longsInd] >>> byteShift));
+        }
+
+        return new BigInteger( bytes );
+    }
+
+
+    /**
+     * @return The size of this instance in bits.
+     */
+    public int size() {
+        return size;
     }
 }

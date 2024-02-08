@@ -2,68 +2,60 @@ package com.dilatush.factor;
 
 import java.math.BigInteger;
 import java.util.Arrays;
-import java.util.BitSet;
 
 public class InverseMultiply {
 
-    // table providing bit position "guesses" based on subproduct parity (s), target parity (t),
-    // bit position zero (z), and the bit position parity (p)...
-    @SuppressWarnings( "SpellCheckingInspection" )
-    final static int[][] GUESSES = new int[][] {
-            // zspt      a  b...
-            /* 0000 */ { 1, 1 },
-            /* 0001 */ { 1, 0 },
-            /* 0010 */ { 0, 0 },
-            /* 0011 */ { 0, 1 },
-            /* 0100 */ { 1, 0 },
-            /* 0101 */ { 1, 1 },
-            /* 0110 */ { 0, 1 },
-            /* 0111 */ { 0, 0 },
-            /* 1000 */ { 1, 0 },
-            /* 1001 */ { 1, 1 },
-            /* 1010 */ { 0, 1 },
-            /* 1011 */ { 1, 1 }
-    };
-
-    final private BitSet target;
-    final private int    bits;
-    final private int    bitsWithSpares;
-    final private int[]  carries;
-    final private BitSet product;
-    final private BitSet operandA;
-    final private BitSet operandB;
+    final private FactorBitArray target;
+    final private int            size;
+    final private int            sizeWithSpares;
+    final private int[]          carries;
+    final private FactorBitArray product;
+    final private FactorBitArray operandA;
+    final private FactorBitArray operandB;
 
 
     public InverseMultiply( final BigInteger _target ) {
 
-        if( _target == null ) throw new IllegalArgumentException( "Missing product" );
+        // sanity checks...
+        if( _target == null ) throw new IllegalArgumentException( "Missing target product" );
 
         // set up our instance...
-        target             = BitSet.valueOf( _target.toByteArray() );
-        bits               = target.length();
-        bitsWithSpares     = bits + (bits >>> 3);
-        carries            = new int[bitsWithSpares];
-        product            = new BitSet( bitsWithSpares );
-        operandA           = new BitSet( bitsWithSpares );
-        operandB           = new BitSet( bitsWithSpares );
+        target             = new FactorBitArray( _target );
+        size               = target.size();
+        sizeWithSpares     = size + Math.max( 32, size >>> 4 );
+        carries            = new int[ sizeWithSpares ];
+        product            = new FactorBitArray( sizeWithSpares );
+        operandA           = new FactorBitArray( sizeWithSpares );
+        operandB           = new FactorBitArray( sizeWithSpares );
     }
 
 
     public void factor() {
 
+        operandA.set( 5, 1 );
+        operandA.set( 4, 1 );
+        operandA.set( 3, 1 );
+        operandA.set( 1, 1 );
+        operandA.set( 0, 1 );
+        operandB.set( 5, 1 );
+        operandB.set( 4, 1 );
+        operandB.set( 3, 1 );
+        operandB.set( 2, 1 );
+        operandB.set( 0, 1 );
+        multiply( 0 );
+
+        BigInteger a = operandA.toBigInteger();
+        BigInteger b = operandB.toBigInteger();
+        BigInteger p = product.toBigInteger();
+        BigInteger x = new BigInteger( "99999999999999999999999999999999999999999999999999999999999999999999999999999" );
+        FactorBitArray y = new FactorBitArray( x );
+        BigInteger z = y.toBigInteger();
+
         // make a crude guess at the value of our factors...
         int bitPos = 0;
-        while( product.length() < target.length() ) {
+        while( product.highestOnePos() < target.highestOnePos() ) {
 
             int sp = subProduct( bitPos );
-
-            int guessIndex = ((bitPos == 0) ? 1 : 0);
-            guessIndex = (guessIndex << 1) + (sp & 1);
-            guessIndex = (guessIndex << 1) + (bitPos & 1);
-            guessIndex = (guessIndex << 1) + (target.get( bitPos ) ? 1 : 0);
-
-            operandA.set( bitPos, GUESSES[guessIndex][0] == 1 );
-            operandB.set( bitPos, GUESSES[guessIndex][1] == 1 );
 
             multiply( 0 );  // 21 * 18 very wrong
 
@@ -74,15 +66,25 @@ public class InverseMultiply {
     }
 
 
-    private int subProduct( final int _posA, final int _posB ) {
-        return (operandA.get( _posA ) && operandB.get( _posB )) ? 1 : 0;
+    private int bitProduct( final int _posA, final int _posB ) {
+        return operandA.get( _posA ) & operandB.get( _posB );
     }
 
 
     private int subProduct( final int _posB ) {
         int subProduct = carries[_posB];
         for( int i = 0; i <= _posB; i++ ) {
-            subProduct += subProduct( i, _posB - i );
+            subProduct += bitProduct( i, _posB - i );
+        }
+        return subProduct;
+    }
+
+
+    private int interiorSubProduct( final int _posB ) {
+        if( _posB < 2 ) return 0;
+        int subProduct = carries[_posB];
+        for( int i = 2; i <= _posB; i++ ) {
+            subProduct += bitProduct( i, _posB - i );
         }
         return subProduct;
     }
@@ -90,12 +92,12 @@ public class InverseMultiply {
 
     private void multiply( final int _startBit ) {
 
-        Arrays.fill( carries, _startBit + 1, bitsWithSpares, 0 );
-        product.clear( _startBit, bitsWithSpares );
-        for( int i = _startBit; i < bitsWithSpares - 1; i++ ) {
+        Arrays.fill( carries, _startBit + 1, sizeWithSpares, 0 );
+        product.clear( _startBit, sizeWithSpares );
+        for( int i = _startBit; i < sizeWithSpares - 1; i++ ) {
             int sp = subProduct( i );
             carries[i+1] = sp >>> 1;
-            product.set( i, (sp & 1) != 0 );
+            product.set( i, sp & 1 );
         }
     }
 
