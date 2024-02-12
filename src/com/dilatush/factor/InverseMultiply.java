@@ -10,14 +10,19 @@ public class InverseMultiply {
     final private int            sizeWithSpares;
     final private int[]          carries;
     final private FactorBitArray product;
-    final private FactorBitArray operandA;
-    final private FactorBitArray operandB;
+    private FactorBitArray operandA;
+    private FactorBitArray operandB;
+
+
+    private BigInteger factor1;
+    private BigInteger factor2;
 
 
     public InverseMultiply( final BigInteger _target ) {
 
         // sanity checks...
-        if( _target == null ) throw new IllegalArgumentException( "Missing target product" );
+        if( _target == null ) throw new IllegalArgumentException( "Missing _target" );
+        if( _target.compareTo( BigInteger.ZERO ) <= 0 ) throw new IllegalArgumentException( "_target must be >= 1" );
 
         // set up our instance...
         target             = new FactorBitArray( _target );
@@ -30,39 +35,74 @@ public class InverseMultiply {
     }
 
 
-    public void factor() {
+    /**
+     * Attempt to factor the target product in this instance.  If successful, returns {@code true} and the two factors are available through the getters.  Otherwise,
+     * returns {@code false}.
+     *
+     * @return Returns {@code true} if factoring was successful.
+     */
+    public boolean factor() {
 
-        operandA.set( 5, 1 );
-        operandA.set( 4, 1 );
-        operandA.set( 3, 1 );
-        operandA.set( 1, 1 );
-        operandA.set( 0, 1 );
-        operandB.set( 5, 1 );
-        operandB.set( 4, 1 );
-        operandB.set( 3, 1 );
-        operandB.set( 2, 1 );
-        operandB.set( 0, 1 );
-        multiply( 0 );
 
-        BigInteger a = operandA.toBigInteger();
-        BigInteger b = operandB.toBigInteger();
-        BigInteger p = product.toBigInteger();
-        BigInteger x = new BigInteger( "99999999999999999999999999999999999999999999999999999999999999999999999999999" );
-        FactorBitArray y = new FactorBitArray( x );
-        BigInteger z = y.toBigInteger();
-
-        // make a crude guess at the value of our factors...
-        int bitPos = 0;
-        while( product.highestOnePos() < target.highestOnePos() ) {
-
-            int sp = subProduct( bitPos );
-
-            multiply( 0 );  // 21 * 18 very wrong
-
-            bitPos++;
+        // if our target is 1, return the trivial answer...
+        if( target.highestOnePos() == 0 ) {
+            factor1 = BigInteger.ONE;
+            factor2 = BigInteger.ONE;
+            return true;
         }
 
-        product.hashCode();
+
+        // if our target is even, return the trivial answer...
+        if( target.get( 0 ) == 0 ) {
+            factor1 = BigInteger.TWO;
+            factor2 = target.toBigInteger().shiftRight( 1 );
+            return true;
+        }
+
+        // make a crude guess at the value of our factors...
+        int thb = target.highestOnePos();
+        int bitPos = 0;
+//        while( product.highestOnePos() < thb ) {
+//
+//            if( bitPos == 0 ) {
+//                if( target.get( 0 ) == 1 ) {
+//                    operandA.set( 0, 1 );
+//                    operandB.set( 0, 1 );
+//                }
+//                else {
+//                    operandA.set( 0, 0 );
+//                    operandB.set( 0, 1 );
+//                }
+//                bitPos++;
+//                continue;
+//            }
+//
+//            var highA = (0 == (bitPos & 1));
+//            var isp = interiorSubProduct( bitPos );
+//            var trgB = target.get( bitPos );
+//
+//            if( highA ) {
+//                if( ((isp & 1) & trgB) == 1 ) {
+//                    operandA.set( bitPos, 1 );
+//                    operandB.set( bitPos, 1 );
+//                }
+//                else if( ((isp & 1) | trgB) == 1 ) {
+//                    operandA.set( bitPos, 1 );
+//                    operandB.set( bitPos, 0 );
+//                }
+//                else {
+//                    operandA.set( bitPos, 0 );
+//                    operandB.set( bitPos, 0 );
+//                }
+//            }
+            operandA = new FactorBitArray( new BigInteger( "61" ), 44 );
+            operandB = new FactorBitArray( new BigInteger( "59" ), 44 );
+            multiply( 0 );
+
+            bitPos++;
+//        }
+
+        return true;
     }
 
 
@@ -90,15 +130,49 @@ public class InverseMultiply {
     }
 
 
+    public BigInteger factor1() {
+
+        return factor1;
+    }
+
+
+    public BigInteger factor2() {
+
+        return factor2;
+    }
+
+
+    /**
+     * Multiply {@code operandA} with {@code operandB}, starting at the given bit position.  The product is in {@code product}.
+     *
+     * @param _startBit The starting bit position to multiply.
+     */
     private void multiply( final int _startBit ) {
 
+        // clear any carries from previous operation...
         Arrays.fill( carries, _startBit + 1, sizeWithSpares, 0 );
+
+        // clear any product bits from previous operations...
         product.clear( _startBit, sizeWithSpares );
-        for( int i = _startBit; i < sizeWithSpares - 1; i++ ) {
-            int sp = subProduct( i );
-            carries[i+1] = sp >>> 1;
-            product.set( i, sp & 1 );
-        }
+
+        // iterate until there's no point...
+        var bitPos = _startBit;
+        var maxBit = operandA.highestOnePos() + operandB.highestOnePos();
+        do {
+            // get the subproduct for this bit position...
+            int sp = subProduct( bitPos );
+
+            // propagate any carry...
+            carries[bitPos + 1] = sp >>> 1;
+
+            // set the product bit to 0 or 1...
+            product.set( bitPos, sp & 1 );
+
+            // move to the next bit...
+            bitPos++;
+
+        // while there are bits to multiply or carries to propagate...
+        } while( (bitPos <= maxBit) || (carries[bitPos] > 0) );
     }
 
 

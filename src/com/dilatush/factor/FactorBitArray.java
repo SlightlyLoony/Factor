@@ -42,14 +42,30 @@ public class FactorBitArray {
      * @param _value The value providing the bits for this class.
      */
     public FactorBitArray( final BigInteger _value ) {
+        this( _value, 0 );
+    }
 
-        size = _value.bitLength();
+
+    /**
+     * Creates a new instance of this class with a bit array set to the bits in the given value.
+     *
+     * @param _value The value providing the bits for this class.
+     * @param _minSize The minimum number of bits to allocate.
+     */
+    public FactorBitArray( final BigInteger _value, final int _minSize ) {
+
+        // sanity checks...
+        if( _value == null ) throw new IllegalArgumentException( "_value is missing" );
+        if( _value.signum() < 0 ) throw new IllegalArgumentException( "_value is negative" );
+
+        // set the size of this array, ensuring that it's long enough to contain our given number...
+        size = Math.max( _minSize, _value.bitLength() );
 
         // note that these bytes are big-endian order whereas the bits array of longs is in little-endian order...
         byte[] bytes = _value.toByteArray();
 
         // we stuff 8 bytes into each long...
-        int longsLen = Math.max( 1, 1 + ((bytes.length - 1) >>> 3) );
+        int longsLen = Math.max( 1, 1 + (size >>> 6) );
         bits = new long[ longsLen ];
 
         // march through our bytes, copying them to the correct place in our array of longs...
@@ -80,7 +96,7 @@ public class FactorBitArray {
         // march from most to least significant long, looking for set bits...
         for( int longsInd = bits.length - 1; longsInd >= 0; longsInd-- ) {
             int l0 = Long.numberOfLeadingZeros( bits[longsInd] );
-            if( l0 != 0 )
+            if( l0 != 64 )
                 return (longsInd << 6) + (63 - l0);
         }
         return -1;
@@ -178,12 +194,20 @@ public class FactorBitArray {
      */
     public BigInteger toBigInteger() {
 
-        int hiBit = highestOnePos();
-        byte[] bytes = new byte[2 + (hiBit >>> 3)];
+        // The bytes array we're going to build is a big-endian transposition of the little-endian array of longs in this instance, and to guarantee a positive
+        // number in the result, we insert a leading zero byte.  Hence, the complicated index and shift math...
+        byte[] bytes = new byte[2 + (highestOnePos() >>> 3)];
+
+        // iterate over the bytes, MSB to LSB...
         for( int i = 0; i < (bytes.length - 1); i++ ) {
+
+            // which long to look in for this byte...
             int longsInd  =  ((bytes.length - 2) - i) >>> 3;
+
+            // how many bits to shift right to get the right byte as LSB...
             int byteShift = (((bytes.length - 2) - i) & 7) << 3;
 
+            // stuff our byte away with the index offset by one to leave a leading 0 byte, guaranteeing a positive result...
             bytes[i + 1] |= (0xff & (bits[longsInd] >>> byteShift));
         }
 
